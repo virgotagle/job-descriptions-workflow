@@ -1,0 +1,245 @@
+{
+  "name": "Job Descriptions",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-640, -128],
+      "id": "cce2f72b-df21-49cb-90a8-ef7d550060cc",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    jl.job_id,\n    jl.title,\n    jl.company_name,\n    jl.location,\n    jl.country_code,\n    jl.listing_date,\n    jl.salary_label,\n    jl.work_type,\n    jl.job_classification,\n    jl.job_sub_classification,\n    jl.work_arrangements,\n    jl.job_details_url,\n    jl.job_summary,\n    jd.status,\n    jd.is_expired,\n    jd.is_verified,\n    jd.expires_at,\n    jd.details,\n    jd.job_profile\nFROM job_listings jl\nINNER JOIN job_details jd ON jl.job_id = jd.job_id\nWHERE jd.job_profile IS NULL;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-416, -128],
+      "id": "c321bd5d-fa09-4ec5-8970-d4e288065696",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-oss:20b",
+          "mode": "list",
+          "cachedResultName": "gpt-oss:20b"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=### TASK ###\nExtract job requirements as JSON. Output ONLY valid JSON, no other text.\n\n### OUTPUT FORMAT ###\n{\"title\":\"...\",\"level\":\"...\",\"exp_years\":[min,max],\"exp_domains\":[\"...\"],\"edu_min\":\"...\",\"skills_req\":[\"...\"],\"skills_pref\":[\"...\"],\"tools_req\":[\"...\"],\"tools_pref\":[\"...\"],\"certs_req\":[\"...\"],\"certs_pref\":[]}\n\n### RULES ###\n\n**IMPORTANT: Extract ALL matching items for each field, not just one.**\n\n**level**: entry | junior | mid | senior | lead | principal | exec | null\n- \"intermediate\", \"3-5 years\" = mid\n- \"senior\", \"5+ years\" = senior\n\n**exp_years**: [min, max] - \"3+ years\" = [3, null], \"2-5 years\" = [2, 5]\n- \"extensive experience\", \"significant experience\" = [5, null]\n- \"solid experience\", \"proven experience\" = [3, null]\n- \"recent graduate\", \"entry level\", \"no experience required\" = [0, null]\n- Not mentioned = [null, null]\n\n**exp_domains**: Work domains mentioned (e.g., \"application support\", \"software development\", \"iOS development\")\n- \"experience in X\" or \"X experience\" -> put X here\n- Use SHORT phrases (1-3 words)\n\n**edu_min**: HS | AS | BS | MS | PhD | null\n\n**skills_req/skills_pref**: Technical abilities (e.g., \"data modelling\", \"troubleshooting\", \"API design\")\n- Use SHORT phrases (1-3 words). \"Proven ability to troubleshoot complex IT systems\" -> \"troubleshooting\"\n- EXCLUDE soft skills: communication, teamwork, problem solving, customer service\n\n**tools_req/tools_pref**: Software, languages, platforms (e.g., \"Python\", \"SQL\", \"AWS\", \"ServiceNow\", \"Docker\")\n- \"SQL skills\" -> put \"SQL\" in tools, NOT skills\n- Programming languages (Swift, Python, Java) are TOOLS, not skills\n- Do NOT duplicate: if \"Swift\" is in tools_req, do NOT put it in skills_req\n\n**certs_req/certs_pref**: Certifications (e.g., \"AWS Certified\", \"ITIL\")\n\n**Required vs Preferred**:\n- \"essential\", \"required\", \"must have\" -> _req fields\n- \"desirable\", \"nice to have\", \"is a plus\", \"not essential\", \"beneficial\", \"but not essential\", \"bonus\" -> _pref fields\n- Read carefully: \"X is a plus\" or \"X experience is a plus\" means X goes in _pref, NOT _req\n- Items under \"Desirable\", \"Bonus\", or \"Nice to have\" headers are ALL preferred, not required\n\n### EXAMPLE ###\nInput: \"Data Engineer with 3+ years experience. Required: Azure Synapse, SQL, Python, data modelling, ETL pipelines. Desirable: ServiceNow, Docker, cloud architecture.\"\n\nOutput: {\"title\":\"Data Engineer\",\"level\":\"mid\",\"exp_years\":[3,null],\"exp_domains\":[\"data engineering\"],\"edu_min\":null,\"skills_req\":[\"data modelling\",\"ETL pipelines\"],\"skills_pref\":[\"cloud architecture\"],\"tools_req\":[\"Azure Synapse\",\"SQL\",\"Python\"],\"tools_pref\":[\"ServiceNow\",\"Docker\"],\"certs_req\":[],\"certs_pref\":[]}\n\n### INPUT ###\n\"\"\"\n{{ $json.details }}\n\"\"\"\n\n### OUTPUT ###"
+            }
+          ]
+        },
+        "options": {
+          "format": "json"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.ollama",
+      "typeVersion": 1,
+      "position": [32, -272],
+      "id": "9ac59bf9-85aa-414b-9e7b-e4426202d588",
+      "name": "Message a model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "YOUR_OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "job_details",
+          "mode": "list",
+          "cachedResultName": "job_details"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_profile": "={{$json}}",
+            "job_id": "={{ $('Execute a SQL query').item.json.job_id }}"
+          },
+          "matchingColumns": ["job_id"],
+          "schema": [
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "job_profile",
+              "displayName": "job_profile",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [608, -128],
+      "id": "d7364b49-ccb3-4ba7-bd05-948de5173726",
+      "name": "Update rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-192, -128],
+      "id": "ccc27f4a-d14e-45a9-8a57-1cebdda1f7f2",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6d4beb1a-c4f4-448c-9f16-5526d88f27e0",
+              "leftValue": "={{ $json }}",
+              "rightValue": "='object'",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [384, -200],
+      "id": "c84e957b-14e0-4b04-baa4-0885040e49fa",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
