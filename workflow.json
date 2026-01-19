@@ -7,7 +7,8 @@
       "typeVersion": 1,
       "position": [-640, -128],
       "id": "cce2f72b-df21-49cb-90a8-ef7d550060cc",
-      "name": "When clicking 'Execute workflow'"
+      "name": "Manual Trigger",
+      "notes": "Manually trigger this workflow to process unprocessed job listings. Can be replaced with a schedule trigger for automated runs."
     },
     {
       "parameters": {
@@ -19,7 +20,8 @@
       "typeVersion": 2.6,
       "position": [-416, -128],
       "id": "c321bd5d-fa09-4ec5-8970-d4e288065696",
-      "name": "Execute a SQL query",
+      "name": "Fetch Unprocessed Jobs",
+      "notes": "Retrieves all job listings that haven't had their job_profile extracted yet. Joins job_listings and job_details tables, filtering for records where job_profile IS NULL.",
       "credentials": {
         "postgres": {
           "id": "YOUR_POSTGRES_CREDENTIAL_ID",
@@ -50,7 +52,8 @@
       "typeVersion": 1,
       "position": [32, -272],
       "id": "9ac59bf9-85aa-414b-9e7b-e4426202d588",
-      "name": "Message a model",
+      "name": "Extract Job Profile via LLM",
+      "notes": "Uses local Ollama LLM (gpt-oss:20b) to extract structured job requirements from raw job details. Outputs JSON with: title, level, experience years/domains, education, required/preferred skills, tools, and certifications.",
       "credentials": {
         "ollamaApi": {
           "id": "YOUR_OLLAMA_CREDENTIAL_ID",
@@ -77,7 +80,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "job_profile": "={{$json}}",
-            "job_id": "={{ $('Execute a SQL query').item.json.job_id }}"
+            "job_id": "={{ $('Fetch Unprocessed Jobs').item.json.job_id }}"
           },
           "matchingColumns": ["job_id"],
           "schema": [
@@ -110,7 +113,8 @@
       "typeVersion": 2.6,
       "position": [608, -128],
       "id": "d7364b49-ccb3-4ba7-bd05-948de5173726",
-      "name": "Update rows in a table",
+      "name": "Save Job Profile to Database",
+      "notes": "Updates the job_details table with the extracted job_profile JSON. Matches records by job_id to update the correct row.",
       "credentials": {
         "postgres": {
           "id": "YOUR_POSTGRES_CREDENTIAL_ID",
@@ -126,7 +130,8 @@
       "typeVersion": 3,
       "position": [-192, -128],
       "id": "ccc27f4a-d14e-45a9-8a57-1cebdda1f7f2",
-      "name": "Loop Over Items"
+      "name": "Process Jobs One by One",
+      "notes": "Iterates through each job record individually to avoid overwhelming the LLM with concurrent requests. Default batch size is 1."
     },
     {
       "parameters": {
@@ -157,79 +162,80 @@
       "typeVersion": 2.3,
       "position": [384, -200],
       "id": "c84e957b-14e0-4b04-baa4-0885040e49fa",
-      "name": "If"
+      "name": "Validate LLM Response",
+      "notes": "Checks if the LLM returned a valid non-empty JSON object. If valid, proceeds to save to database. If invalid/empty, skips this record and continues to the next job."
     }
   ],
   "pinData": {},
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "Manual Trigger": {
       "main": [
         [
           {
-            "node": "Execute a SQL query",
+            "node": "Fetch Unprocessed Jobs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Execute a SQL query": {
+    "Fetch Unprocessed Jobs": {
       "main": [
         [
           {
-            "node": "Loop Over Items",
+            "node": "Process Jobs One by One",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Message a model": {
+    "Extract Job Profile via LLM": {
       "main": [
         [
           {
-            "node": "If",
+            "node": "Validate LLM Response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Loop Over Items": {
+    "Process Jobs One by One": {
       "main": [
         [],
         [
           {
-            "node": "Message a model",
+            "node": "Extract Job Profile via LLM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update rows in a table": {
+    "Save Job Profile to Database": {
       "main": [
         [
           {
-            "node": "Loop Over Items",
+            "node": "Process Jobs One by One",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "If": {
+    "Validate LLM Response": {
       "main": [
         [
           {
-            "node": "Update rows in a table",
+            "node": "Save Job Profile to Database",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Loop Over Items",
+            "node": "Process Jobs One by One",
             "type": "main",
             "index": 0
           }
